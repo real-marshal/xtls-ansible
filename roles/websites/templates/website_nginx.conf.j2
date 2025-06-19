@@ -1,0 +1,90 @@
+server {
+
+  ### --- basic boilerplate --- ###
+
+  listen 8443 ssl;
+  listen [::]:8443 ssl;
+  http2 on;
+  server_name {{ server_name }};
+  root /srv/www/{{ server_name }};
+
+  access_log /var/log/nginx/sites/{{ server_name }}.access.log combined buffer=512k flush=1m;
+  error_log /var/log/nginx/sites/{{ server_name }}.error.log warn;
+
+  ssl_certificate /etc/letsencrypt/live/{{ server_name }}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/{{ server_name }}/privkey.pem;
+  ssl_trusted_certificate /etc/letsencrypt/live/{{ server_name }}/chain.pem;
+  
+  # add_header in location blocks override parent add_headers,
+  # so we need to manually include it every fucking time
+  include /etc/nginx/common_headers.conf;
+  
+  # make sure to have the zone created
+  limit_req zone=limit_zone burst=40 nodelay;
+  
+  ### --- locations --- ###
+
+  location ~ /\. {
+    deny all;
+  }
+
+  location ~* \.(?:html|htm)$ {
+    include /etc/nginx/common_headers.conf;
+
+    add_header Cache-Control "no-cache, public";
+  }
+
+  # hash-containing filenames
+  location ~* \.(?:css|js)$ {
+    include /etc/nginx/common_headers.conf;
+
+    add_header Cache-Control "public, max-age=31536000, immutable";
+  }
+
+  location ~* \.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm|htc|mp3|wav)$ {
+    include /etc/nginx/common_headers.conf;
+
+    add_header Cache-Control "public, max-age=0, stale-while-revalidate=86400";
+  }
+
+  location ~* \.(?:ttf|ttc|otf|eot|woff2?)$ {
+    include /etc/nginx/common_headers.conf;
+
+    add_header Cache-Control "public, max-age=0, stale-while-revalidate=86400";
+    add_header Access-Control-Allow-Origin "*";
+  }
+
+  location / {
+    try_files $uri $uri.html $uri/ /index.html;
+  }
+
+  location = /favicon.ico {
+    log_not_found off;
+  }
+
+  location = /robots.txt {
+    log_not_found off;
+  }
+  
+  ### --- gzip --- ###
+
+  gzip on;
+  gzip_vary on;
+  gzip_proxied any;
+  gzip_comp_level 6;
+  gzip_types text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
+}
+
+server {
+  listen 8080;
+  listen [::]:8080;
+    server_name {{ server_name }};
+    
+  location ^~ /.well-known/acme-challenge/ {
+    root /var/lib/letsencrypt;
+  }
+    
+  location / {
+      return 301 https://{{ server_name }}$request_uri;
+  }
+}

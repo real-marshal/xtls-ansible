@@ -1,0 +1,5 @@
+websites:
+  - name: mirror.ffraid.tips
+    repo_url: "git@github.com:real-marshal/ffraid-tips.git"
+    repo_branch: "main"
+    use_lfs: true

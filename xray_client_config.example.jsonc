@@ -1,0 +1,124 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "routing": {
+    // looks like IPOnDemand isn't really needed and this could save DNS roundtrips
+    // routeOnly section on https://xtls.github.io/en/config/inbound.html#sniffingobject
+    // more http://github.com/XTLS/Xray-core/discussions/2842
+    "domainStrategy": "AsIs",
+    "domainMatcher": "hybrid",
+    // applied top to bottom
+    "rules": [
+      {
+        "type": "field",
+        "domain": ["geosite:category-ads"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "domain": ["domain:ru", "domain:рф"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "ip": ["geoip:private", "geoip:ru"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "protocol": ["bittorrent"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "domain:vk.com",
+          "domain:userapi.com",
+          "domain:mradx.net",
+          "domain:vkuser.net",
+          "domain:yandex.net",
+          "domain:yastatic.net"
+        ],
+        "outboundTag": "direct"
+      }
+      // vision is already supposed to block QUIC https://github.com/chika0801/Xray-examples/issues/5#issuecomment-1759576215
+      // but just to be sure
+      // speed is nice but my main reason for doing this is about concerns that QUIC traffic doesn't use session ids
+      // in its TLS handshakes, which could be used as a fingeprint for REALITY-encrypted packets
+      // if it would support HTTP3 proxying that is, which i don't think it does?
+      // TODO: check the assumption above
+      // {
+      //   "type": "field",
+      //   "network": "udp",
+      //   "port": "443",
+      //   "outboundTag": "block"
+      // }
+    ]
+  },
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 1080,
+      /* --- proxy protocol and its settings --- */
+      "protocol": "socks",
+      "settings": {
+        "udp": true
+      },
+      /* --- transport protocol and its settings --- */
+      "streamSettings": {
+        "network": "raw",
+        "security": "none"
+      },
+      /* --- analyzing traffic, allows routing based on a protocol + dns optimization --- */
+      "sniffing": {
+        "enabled": true,
+        // routing rules optimization, allows reading domain names from packets, read more above in routing section
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
+      },
+      "tag": "socks"
+    }
+  ],
+  "outbounds": [
+    // first item is used by default (when no routing rules are applied)
+    {
+      /* --- proxy protocol and its settings --- */
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "example.com",
+            "port": 443,
+            "users": [
+              {
+                "id": "run xray uuid",
+                "flow": "xtls-rprx-vision",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      /* --- transport protocol and its settings --- */
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "example.com",
+          "fingeprint": "chrome",
+          "publicKey": "xray x25519 -i server_private_key"
+        }
+      },
+      "tag": "proxy"
+    },
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "block"
+    }
+  ]
+}

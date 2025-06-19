@@ -1,0 +1,29 @@
+# requires root
+---
+- name: "Create {{ service }}.{{ unit_type }}.d directory"
+  ansible.builtin.file:
+    state: directory
+    path: "/etc/systemd/system/{{ service }}.{{ unit_type }}.d/"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "Copy {{ service }}.{{ unit_type }} override file"
+  when: override_file is defined
+  ansible.builtin.template:
+    src: "{{ override_file }}"
+    dest: "/etc/systemd/system/{{ service }}.{{ unit_type }}.d/override.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload
+
+- name: "Copy {{ service }}.{{ unit_type }} override template"
+  when: override_template is defined
+  ansible.builtin.template:
+    src: "{{ override_template }}"
+    dest: "/etc/systemd/system/{{ service }}.{{ unit_type }}.d/override.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload

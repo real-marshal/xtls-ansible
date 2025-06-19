@@ -1,0 +1,17 @@
+# sets up basic OS stuff like system auto-update, docker etc.
+---
+- name: Install and start docker
+  ansible.builtin.import_tasks: install_docker.yml
+  become: true
+
+- name: Set up auto-update
+  ansible.builtin.import_tasks: auto_update.yml
+  become: true
+
+- name: Install some other packages
+  ansible.builtin.dnf:
+    state: present
+    name:
+      - git
+      - git-lfs
+      - cronie

@@ -1,0 +1,17 @@
+---
+- name: Main
+  hosts: all
+  gather_facts: false
+
+  vars:
+    project_path: "~"
+
+  roles:
+    - role: base_os
+      become: true
+
+    - role: compose_services
+
+    - role: websites
+
+  tasks:

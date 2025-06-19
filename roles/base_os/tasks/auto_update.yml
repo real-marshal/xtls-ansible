@@ -1,0 +1,29 @@
+# requires root
+---
+- name: Install dnf-automatic
+  ansible.builtin.dnf:
+    state: present
+    name: dnf-automatic
+
+- name: Create the config
+  ansible.builtin.copy:
+    src: dnf-automatic.conf
+    dest: /etc/dnf/automatic.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: copy_result
+
+- name: Add timer config override
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: systemd_unit_conf_override.yml
+  vars:
+    service: dnf-automatic.timer
+    override_file: "{{ playbook_dir }}/roles/base_os/files/dnf-automatic.timer.override.conf"
+
+- name: Enable and start the timer
+  ansible.builtin.service:
+    state: started
+    enabled: true
+    name: dnf-automatic.timer

@@ -1,0 +1,6 @@
+secrets
+.vscode
+xray_client_config.jsonc
+xray_client_config_ovh.jsonc
+roles/compose_services/files/xray_config.jsonc
+inventory.ini

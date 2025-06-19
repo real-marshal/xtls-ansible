@@ -1,0 +1,7 @@
+- name: Restart nginx in docker
+  ansible.builtin.command:
+    cmd: "docker compose exec -T nginx nginx -s reload"
+  args:
+    chdir: "~"
+  changed_when: true
+  listen: nginx reload

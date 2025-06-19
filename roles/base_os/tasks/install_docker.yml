@@ -1,0 +1,69 @@
+# requires root
+---
+- name: Check if Docker repo exists
+  ansible.builtin.stat:
+    path: /etc/yum.repos.d/docker-ce.repo
+  register: docker_repo
+
+- name: Remove versions from system repo
+  ansible.builtin.dnf:
+    state: absent
+    name:
+      - docker
+      - docker-client
+      - docker-client-latest
+      - docker-common
+      - docker-latest
+      - docker-latest-logrotate
+      - docker-logrotate
+      - docker-selinux
+      - docker-engine-selinux
+      - docker-engine
+  when: not docker_repo.stat.exists
+  register: docker_removal_result
+  failed_when:
+    - docker_removal_result.rc != 0
+    - '"No packages to remove" not in docker_removal_result.msg'
+    - '"Depsolve Error" not in docker_removal_result.msg'
+
+- name: Add the repo
+  ansible.builtin.command:
+    # cmd: "dnf-3 config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo"
+    cmd: "dnf-3 config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo"
+  when: not docker_repo.stat.exists
+  changed_when: true
+
+- name: Install the packages
+  ansible.builtin.dnf:
+    state: present
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+  notify: restart docker
+
+- name: Ensure group docker exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+- name: Add the user {{ ansible_user }} to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  register: add_to_docker_group_result
+
+- name: Include reset connection tasks # noqa: no-handler
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: reset_ssh_connection.yml
+  when: add_to_docker_group_result.changed
+
+- name: Enable and start the service
+  ansible.builtin.service:
+    state: started
+    enabled: true
+    name: docker

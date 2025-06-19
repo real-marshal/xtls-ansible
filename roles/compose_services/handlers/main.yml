@@ -1,0 +1,22 @@
+- name: Restart Docker Compose services
+  listen: docker compose restart
+  ansible.builtin.command:
+    cmd: "docker compose down && docker compose up -d"
+  args:
+    chdir: "{{ project_path }}"
+  changed_when: true
+
+- name: Restart nginx in docker
+  listen: nginx reload
+  ansible.builtin.command:
+    cmd: "docker compose exec -T nginx nginx -s reload"
+  args:
+    chdir: "{{ project_path }}"
+  changed_when: true
+
+- name: Restart xray-core container
+  listen: docker compose restart xray-core
+  community.docker.docker_compose_v2:
+    project_src: "{{ project_path }}"
+    state: restarted
+    services: xray-core

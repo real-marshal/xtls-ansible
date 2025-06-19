@@ -1,0 +1,141 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "routing": {
+    // looks like IPOnDemand isn't really needed and this could save DNS roundtrips
+    // routeOnly section on https://xtls.github.io/en/config/inbound.html#sniffingobject
+    // more http://github.com/XTLS/Xray-core/discussions/2842
+    "domainStrategy": "AsIs",
+    "domainMatcher": "hybrid",
+    // applied top to bottom
+    "rules": [
+      {
+        "type": "field",
+        "domain": ["domain:ru", "domain:рф"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "domain": ["geosite:category-ads"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "ip": ["geoip:private", "geoip:ru"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "protocol": ["bittorrent"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "domain:vk.com",
+          "domain:userapi.com",
+          "domain:mradx.net",
+          "domain:vkuser.net",
+          "domain:yandex.net",
+          "domain:yastatic.net"
+        ],
+        "outboundTag": "block"
+      }
+      // vision is already supposed to block QUIC https://github.com/chika0801/Xray-examples/issues/5#issuecomment-1759576215
+      // but just to be sure
+      // speed is nice but my main reason for doing this is about concerns that QUIC traffic doesn't use session ids
+      // in its TLS handshakes, which could be used as a fingeprint for REALITY-encrypted packets
+      // if it would support HTTP3 proxying that is, which i don't think it does?
+      // TODO: check the assumption above
+      // {
+      //   "type": "field",
+      //   "network": "udp",
+      //   "port": "443",
+      //   "outboundTag": "block"
+      // }
+    ]
+  },
+  // run xray uuid for id, xray x25519 - for private key
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 4443,
+      /* --- proxy protocol and its settings --- */
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "run xray uuid",
+            // only used for human readable identification
+            "email": "your-device-name",
+            // xtls (vision) - prevents tls-in-tls traffic characteristics
+            // supports tcp transport only, encrypted with tls or reality
+            // more https://github.com/XTLS/Xray-core/discussions/1295
+            "flow": "xtls-rprx-vision"
+          }
+        ],
+        "decryption": "none"
+      },
+      /* --- transport protocol and its settings --- */
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          // Requires TLS1.3 and HTTP2 support
+          "dest": "nginx:8443",
+          "serverNames": ["example.com"],
+          "privateKey": "run xray x25519",
+          // list of shortIds available to clients, can be used to distinguish different clients at handshake phase
+          // client puts its shortId into sessionId along with some other data then encrypts it
+          // using a key derived from ECDHE shared key (client already has server's public key in its config)
+          // and random salt, sent to the server in "random" field of tls hello
+          // this means that without server's public key, an attacker can't craft a valid sessionId
+          // i.e. shortIds are used purely for differentiating between clients and using empty shortId is perfectly fine
+          "shortIds": [
+            "" // if this item exists, client shortId can be empty
+            // run openssl rand -hex 8 to generate
+            // "c94dffa32f8750ae" // 0 to f, length is a multiple of 2, maximum length is 16
+          ]
+        }
+      },
+      /* --- analyzing traffic, allows routing based on a protocol + dns optimization --- */
+      "sniffing": {
+        "enabled": true,
+        // routing rules optimization, allows reading domain names from packets, read more above in routing section
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
+      },
+      "tag": "xtls"
+    }
+  ],
+  "outbounds": [
+    // first item is used by default (when no routing rules are applied)
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    },
+    // {
+    //   "tag": "warp",
+    //   "protocol": "wireguard",
+    //   "settings": {
+    //     "secretKey": "wg private key",
+    //     "DNS": "1.1.1.1",
+    //     "address": [
+    //       "172.16.0.2/32",
+    //       "2606:4700:110:8f68:2b9a:4324:6cd8:d489/128"
+    //     ],
+    //     "peers": [
+    //       {
+    //         "publicKey": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
+    //         "endpoint": "engage.cloudflareclient.com:2408"
+    //       }
+    //     ]
+    //   }
+    // },
+    {
+      "protocol": "blackhole",
+      "tag": "block"
+    }
+  ]
+}

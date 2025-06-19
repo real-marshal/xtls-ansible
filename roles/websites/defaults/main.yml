@@ -1,0 +1,3 @@
+---
+le_certs: "{{ project_path }}/le_certs"
+le_challenges: "{{ project_path }}/le_challenges"

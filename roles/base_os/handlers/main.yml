@@ -1,0 +1,14 @@
+---
+- name: Restart dnf-automatic
+  listen: restart dnf-automatic.service
+  ansible.builtin.service:
+    state: restarted
+    enabled: true
+    name: dnf-automatic
+
+- name: Restart dnf-automatic.timer
+  listen: restart dnf-automatic.timer
+  ansible.builtin.service:
+    state: restarted
+    enabled: true
+    name: dnf-automatic.timer

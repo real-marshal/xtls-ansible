@@ -1,0 +1,42 @@
+---
+- name: Copy Docker Compose file
+  ansible.builtin.copy:
+    src: compose.yaml
+    dest: "{{ project_path }}/docker-compose.yaml"
+    mode: "0644"
+  notify: docker compose restart
+
+- name: Create default bind mounts (to make sure they are not owned by root - fking docker, shoulda used podman...)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0755"
+  loop:
+    - ./sites_src
+    - ./sites
+    - ./le_certs
+    - ./le_challenges
+    - ./le_logs
+    - ./nginx_logs
+    - ./xray_logs
+
+- name: Copy nginx config
+  ansible.builtin.copy:
+    src: nginx_config
+    dest: "{{ project_path }}"
+    mode: "0755"
+  notify: nginx reload
+
+- name: Copy xray-core config
+  ansible.builtin.copy:
+    src: xray_config.jsonc
+    dest: "{{ project_path }}/xray_config.jsonc"
+    mode: "0644"
+  notify: docker compose restart xray-core
+
+- name: Ensure Docker Compose services are up and running
+  community.docker.docker_compose_v2:
+    project_src: "{{ project_path }}"
+    state: present

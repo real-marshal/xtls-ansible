@@ -1,0 +1,12 @@
+server {
+  listen 8080;
+  listen [::]:8080;
+  server_name {{ server_name }};
+
+  access_log /var/log/nginx/sites/{{ server_name }}.le.access.log combined buffer=512k flush=1m;
+  error_log /var/log/nginx/sites/{{ server_name }}.le.error.log warn;
+    
+  location ^~ /.well-known/acme-challenge/ {
+    root /var/lib/letsencrypt;
+  }
+}

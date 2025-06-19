@@ -1,0 +1,26 @@
+---
+- name: Set up cron job for certbot renewal
+  ansible.builtin.cron:
+    name: "certbot renew"
+    day: "1"
+    job: "cd {{ project_path }} && docker compose run --rm certbot renew && docker compose exec -T nginx nginx -s reload"
+    state: present
+# - name: Set up cron job for pulling new website changes
+#   ansible.builtin.cron:
+#     name: "{{ item.name }} git pull"
+#     minute: "1"
+#     job: >
+#       cd {{ project_path }}/sites_src/{{ item.name }} &&
+#       old_commit=$(git rev-parse HEAD) &&
+#       git pull &&
+#       new_commit=$(git rev-parse HEAD) &&
+#       if [[ "$old_commit" != "$new_commit" ]]; then
+#         git lfs pull &&
+#         yarn &&
+#         yarn build &&
+#         cp -rf ./out/* {{ project_path }}/sites/{{ item.name }}
+#       fi
+#     state: present
+#   loop: "{{ websites }}"
+#   loop_control:
+#     label: "{{ item.name }}"

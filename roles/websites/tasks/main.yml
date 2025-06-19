@@ -1,0 +1,127 @@
+---
+- name: Make sure nginx is started
+  community.docker.docker_compose_v2:
+    project_src: "{{ project_path }}"
+    state: present
+    services: nginx
+
+- name: Copy read-only ssh git key
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/secrets/{{ item.name }}"
+    dest: "~/.ssh/{{ item.name }}"
+    mode: "0600"
+  loop: "{{ websites }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Clone or update site repositories
+  ansible.builtin.git:
+    repo: "{{ item.repo_url }}"
+    dest: "{{ project_path }}/sites_src/{{ item.name }}"
+    version: "{{ item.repo_branch | default('master') }}"
+    key_file: "~/.ssh/{{ item.name }}"
+    accept_hostkey: true
+    force: true
+  register: git_output
+  loop: "{{ websites }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Clone or update site repositories using LFS # noqa: no-handler
+  ansible.builtin.command:
+    cmd: git lfs pull
+  args:
+    chdir: "{{ project_path }}/sites_src/{{ item.item.name }}"
+  when: item.item.use_lfs and item.changed
+  changed_when: item.changed
+  loop: "{{ git_output.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Build sites
+  ansible.builtin.command:
+    cmd: "docker compose run --rm node sh -c '\
+      corepack enable && \
+      cd {{ item.name }} && \
+      rm -rf node_modules && \
+      yarn install --immutable && \
+      yarn build && \
+      chown -R 1000:1000 ./out'"
+  args:
+    chdir: "{{ project_path }}/sites_src/{{ item.name }}"
+    creates: "{{ project_path }}/sites/{{ item.name }}"
+  loop: "{{ websites }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Copy build results to sites directory
+  ansible.builtin.copy:
+    src: "{{ project_path }}/sites_src/{{ item.name }}/out/"
+    dest: "{{ project_path }}/sites/{{ item.name }}"
+    remote_src: true
+    mode: "0755"
+  loop: "{{ websites }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Check if LE certificates exist
+  ansible.builtin.stat:
+    path: "{{ le_certs }}/live/{{ item.name }}/fullchain.pem"
+  register: cert_stat
+  loop: "{{ websites }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Generate LE challenge nginx config for each website if no certs exist
+  ansible.builtin.template:
+    src: le_challenge_nginx.conf.j2
+    dest: "{{ project_path }}/nginx_config/conf.d/{{ item.item.name }}.conf"
+    mode: "0644"
+  when: not item.stat.exists
+  loop: "{{ cert_stat.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  vars:
+    server_name: "{{ item.item.name }}"
+
+- name: Restart docker services
+  ansible.builtin.command:
+    cmd: "docker compose down && docker compose up -d"
+  args:
+    chdir: "{{ project_path }}"
+  changed_when: true
+
+- name: Obtain Let's Encrypt certificates for new websites
+  ansible.builtin.command: >
+    docker compose run --rm certbot certonly --webroot --webroot-path /var/lib/letsencrypt
+    --email remarshal@protonmail.com -d {{ item.name }} --agree-tos --non-interactive
+    --cert-name {{ item.name }}
+  args:
+    chdir: "{{ project_path }}"
+    creates: "{{ le_certs }}/live/{{ item.name }}/fullchain.pem"
+  loop: "{{ websites }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: nginx reload
+
+- name: Generate actual nginx config for each website
+  ansible.builtin.template:
+    src: website_nginx.conf.j2
+    dest: "{{ project_path }}/nginx_config/conf.d/{{ item.name }}.conf"
+    mode: "0644"
+  loop: "{{ websites }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    server_name: "{{ item.name }}"
+  notify: nginx reload
+
+- name: Restart docker services
+  ansible.builtin.command:
+    cmd: "docker compose down && docker compose up -d"
+  args:
+    chdir: "{{ project_path }}"
+  changed_when: true
+
+- name: Set up cron jobs for certbot renewal and website updating
+  ansible.builtin.import_tasks: cron_jobs.yml
