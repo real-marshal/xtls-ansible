@@ -59,6 +59,7 @@
   "inbounds": [
     {
       "listen": "127.0.0.1",
+      // change this to 10808 for android clients
       "port": 1080,
       /* --- proxy protocol and its settings --- */
       "protocol": "socks",
